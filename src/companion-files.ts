@@ -1,53 +1,41 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 
-import {getUriName, getUriDirectory} from './tools';
+import { getUriName, getWorkspaceRelativeFilePath } from './tools';
 
 
 export class CompanionFiles {
 
-    constructor() {
+  async list(): Promise<Array<vscode.Uri>> {
 
+    if (!vscode.window.activeTextEditor) {
+      throw "No active document found";
     }
 
-    list(): Thenable<Array<vscode.Uri>> {
+    const doc = vscode.window.activeTextEditor.document;
+    const searchPatern = getWorkspaceRelativeFilePath(doc.uri) + '/*';
+    let files: vscode.Uri[];
 
-        let t = new Promise<Array<vscode.Uri>>(
-            (resolve, reject) => {
-                let doc: vscode.TextDocument = undefined;
-                if (vscode.window.activeTextEditor) {
-                    doc = vscode.window.activeTextEditor.document;
-                }
-                if (!doc) {
-                    return reject('No active document found');
-                }
-
-                let searchPatern = getUriDirectory(doc.uri) + '/*';
-                vscode.workspace.findFiles(searchPatern, '**/node_modules/**').then(
-                    (r: Array<vscode.Uri>) => {
-                        let c = this.matchCompanion(doc.uri, r);
-                        return resolve(c);
-                    },
-                    reason => {
-                        return reject('Failed to find companions files');
-                    });
-            });
-
-        return t;
+    try {
+      files = await vscode.workspace.findFiles(searchPatern, '**/node_modules/**')
+    } catch (error) {
+      throw "Failed to find companions files";
     }
 
-    matchCompanion(sourceUri: vscode.Uri, companionUris: Array<vscode.Uri>): Array<vscode.Uri> {
-        let sourceName = getUriName(sourceUri);
-        let filteredCompanionUris = companionUris.filter((companionUri: vscode.Uri) => {
-            let companionName = getUriName(companionUri);
-            if (companionName === sourceName && companionUri.fsPath !== sourceUri.fsPath) {
-                return true;
-            }
+    return this.matchCompanion(doc.uri, files);
+  }
 
-            return false;
-        });
+  matchCompanion(sourceUri: vscode.Uri, companionUris: Array<vscode.Uri>): Array<vscode.Uri> {
+    let sourceName = getUriName(sourceUri);
 
-        return filteredCompanionUris;
-    }
+    let filteredCompanionUris = companionUris.filter((companionUri: vscode.Uri) => {
+      let companionName = getUriName(companionUri);
+      const isSameFile = companionUri.fsPath === sourceUri.fsPath;
+      const isCompanionName = companionName === sourceName;
+
+      return isCompanionName && !isSameFile;
+    });
+
+    return filteredCompanionUris;
+  }
 
 }

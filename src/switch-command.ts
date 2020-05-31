@@ -1,44 +1,54 @@
 import * as vscode from 'vscode';
 
-import {CompanionFiles} from './companion-files';
-import {createQuickPickItemList, QuickPickItem} from './quick-pick-item';
+import { CompanionFiles } from './companion-files';
+import { createQuickPickItemList, QuickPickItem } from './quick-pick-item';
 
-export let switchCommand = function () {
+// NOTE: clear if pass vscode stuff such current document... as args
+// in order to remove side effects ?
+export async function switchCommand() {
 
-    let companionFile = new CompanionFiles();
+  const companionFile = new CompanionFiles();
 
-    companionFile.list().then((cs: Array<vscode.Uri>) => {
+  let uris;
 
-        // Create item list from companions files
-        let qpItemList = createQuickPickItemList(cs);
+  try {
+    uris = await companionFile.list();
+  } catch {
+    vscode.window.showErrorMessage('Failed to list companions document!');
+    return;
+  }
 
-        if (qpItemList.length === 0) {
-            vscode.window.showInformationMessage('No companions file found.');
-        } else {
+  // Create item list from companions files
+  const quickPickItemList = createQuickPickItemList(uris);
+  const isQuickPickItemListEmpty = quickPickItemList.length === 0;
+  if (isQuickPickItemListEmpty) {
+    vscode.window.showInformationMessage('No companions file found.');
+    return;
+  }
 
-            // Pick one
-            vscode.window.showQuickPick(qpItemList).then((pickedItem: QuickPickItem) => {
-                // Open doc
-                vscode.workspace.openTextDocument(pickedItem.uri).then((document: vscode.TextDocument) => {
-                    // Show a text document to the active view column
-                    const active_view_column = vscode.window.activeTextEditor.viewColumn;
-                    vscode.window.showTextDocument(document, active_view_column).then(
-                        document => {
-                        },
-                        reason => {
-                            vscode.window.showErrorMessage('Failed to show companion file.');
-                        });
-                }, r => {
-                    vscode.window.showErrorMessage('Failed to open companion file.');
-                });
-            }, reason => {
-                vscode.window.showErrorMessage('Failed to pick companion file.');
-            });
+  let pickedItem: QuickPickItem;
+  try {
+    // Pick one
+    pickedItem = await vscode.window.showQuickPick(quickPickItemList);
+  } catch (error) {
+    vscode.window.showErrorMessage('Failed to pick companion file.');
+    return;
+  }
 
-        }
+  let document: vscode.TextDocument;
+  try {
+    // Open doc
+    document = await vscode.workspace.openTextDocument(pickedItem.uri);
+  } catch (error) {
+    vscode.window.showErrorMessage('Failed to open companion file.');
+    return;
+  }
 
-    }, (r) => {
-        vscode.window.showErrorMessage('Failed to list companions document !');
-    });
-    
+  const activeViewColumn = vscode.window.activeTextEditor.viewColumn;
+  try {
+    // Show a text document to the active view column
+    await vscode.window.showTextDocument(document, activeViewColumn)
+  } catch (error) {
+    vscode.window.showErrorMessage('Failed to show companion file.');
+  }
 }
