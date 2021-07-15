@@ -10,7 +10,7 @@ export class CompanionFiles {
 
     }
 
-    list(): Thenable<Array<vscode.Uri>> {
+    list(): Promise<Array<vscode.Uri>> {
 
         let t = new Promise<Array<vscode.Uri>>(
             (resolve, reject) => {
