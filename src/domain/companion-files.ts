@@ -14,7 +14,7 @@ export interface CompanionFilesFacade {
   getActiveDocumentPath(): string | undefined;
   findFilesPaths(includePattern: string, excludePattern?: string): Promise<string[]>;
   getDirectoryPath(filePath: string): string;
-  focusFile(filePath: string): Promise<any>;
+  openCompanionFile(filePath: string): Promise<any>;
   selectCompanionFile(uris: CompanionFile[]): Promise<CompanionFile | undefined>;
   handleException(error: any | Error | ErrorException): any;
   getFriendlyNameMap(defaultFriendlyMap: FriendlyNameMap): FriendlyNameMap;
@@ -57,6 +57,8 @@ export class CompanionFiles {
     if (selected === undefined) {
       throw new SelectCompanionFileException();
     }
+
+    this.facade.openCompanionFile(selected.filePath);
   }
 
   public async getCompanionFilesPaths(): Promise<string[]> {

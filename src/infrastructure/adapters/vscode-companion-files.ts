@@ -31,7 +31,7 @@ export class VscodeCompanionFilesImpl implements CompanionFilesFacade {
     const documentUris = await vscode.workspace.findFiles(searchPatern, '**/node_modules/**');
     return documentUris.map(uri => uri.fsPath);
   }
-  async focusFile(filePath: string) {
+  async openCompanionFile(filePath: string) {
     // Open doc
     const [document, error] = await asyncCatch(vscode.workspace.openTextDocument(filePath));
     if (error !== null) {
