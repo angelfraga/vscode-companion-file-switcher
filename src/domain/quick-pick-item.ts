@@ -8,8 +8,9 @@ export interface CompanionFile {
 }
 
 export function createCompanionFile(filePath: string, friendlyNameMap: FriendlyNameMap) {
-  const extension = path.extname(filePath);
-  const friendlyName = friendlyNameMap[extension];
+  const fileName = path.basename(filePath);
+  const extensionKey = Object.keys(friendlyNameMap).find(key => fileName.indexOf(key) >= 0);
+  const friendlyName = extensionKey && friendlyNameMap[extensionKey];
   return {
     filePath,
     label: friendlyName ?? filePath,
