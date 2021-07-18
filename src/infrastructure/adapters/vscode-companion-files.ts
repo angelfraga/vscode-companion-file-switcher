@@ -20,13 +20,18 @@ export class VscodeCompanionFilesImpl implements CompanionFilesFacade {
 
   getDirectoryPath(documentPath: string) {
     const absoluteDirectoryPath = path.normalize(path.dirname(documentPath) + '/');
-    // TODO: use vscode.workspace.workspaceFolders instead
-    const root = path.normalize(vscode.workspace.rootPath + '/');
+    const getMultiRootFolderPath = () => {
+      const rootFoldersPaths = vscode.workspace.workspaceFolders?.map(folder => path.normalize(folder.uri.fsPath + '/'));
+      return rootFoldersPaths?.find(folderPath => absoluteDirectoryPath.indexOf(folderPath) >= 0);
+    };
+
+    const rootPath = getMultiRootFolderPath() || vscode.workspace.rootPath as string;
 
     // Remove root directory
-    const relativeDirectoryPath = absoluteDirectoryPath.replace(root, '');
+    const relativeDirectoryPath = absoluteDirectoryPath.replace(rootPath, '');
     return relativeDirectoryPath;
   }
+
   async findFilesPaths(searchPatern: string) {
     const documentUris = await vscode.workspace.findFiles(searchPatern, '**/node_modules/**');
     return documentUris.map(uri => uri.fsPath);
