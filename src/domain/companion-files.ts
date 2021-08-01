@@ -1,21 +1,22 @@
 import * as path from 'path';
+import { CompanionFile } from './companion-file';
 import {
   ActiveDocumentException,
   ErrorException,
   FindCompanionFileException,
+  NoOpenWorkspaceException,
   PickCompanionFileException,
   SelectCompanionFileException
 } from './exceptions';
 import { FriendlyNameMap } from './friendly-name';
-import { CompanionFile, createCompanionFiles } from './quick-pick-item';
-import { asyncCatch, matchCompanion } from './tools';
+import { asyncCatch } from './tools';
 
 export interface CompanionFilesFacade {
   getActiveDocumentPath(): string | undefined;
-  findFilesPaths(includePattern: string, excludePattern?: string): Promise<string[]>;
-  getDirectoryPath(filePath: string): string;
-  openCompanionFile(filePath: string): Promise<any>;
-  selectCompanionFile(uris: CompanionFile[]): Promise<CompanionFile | undefined>;
+  findFilePaths(includePattern: string, excludePattern?: string): Promise<string[]>;
+  getWorkspaceRootFoldersPaths(): string[];
+  openCompanionFile(file: CompanionFile): Promise<any>;
+  selectCompanionFile(files: CompanionFile[]): Promise<CompanionFile | undefined>;
   handleException(error: any | Error | ErrorException): any;
   getFriendlyNameMap(defaultFriendlyMap: FriendlyNameMap): FriendlyNameMap;
 }
@@ -39,42 +40,99 @@ export class CompanionFiles {
     private readonly facade: CompanionFilesFacade
   ) { }
 
+  /**
+   * Entry point for this extension when is called
+   */
   public async run() {
-    const friendlyNameMap = await this.facade.getFriendlyNameMap(DEFAULT_FRIENDLY_NAME_MAP);
-    const companionFilesPaths = await this.getCompanionFilesPaths();
-
-    // Create item list from companions files
-    let qpItemList = createCompanionFiles(companionFilesPaths, friendlyNameMap);
-    if (qpItemList.length === 0) {
-      throw new FindCompanionFileException();
-    }
-
-    // Pick one
-    const [selected, error2] = await asyncCatch(this.facade.selectCompanionFile(qpItemList));
-    if (!!error2) {
-      throw new PickCompanionFileException();
-    }
-    if (selected === undefined) {
-      throw new SelectCompanionFileException();
-    }
-
-    this.facade.openCompanionFile(selected.filePath);
-  }
-
-  public async getCompanionFilesPaths(): Promise<string[]> {
     const activeDocumentPath = this.facade.getActiveDocumentPath();
     if (activeDocumentPath === undefined) {
       throw new ActiveDocumentException();
     }
-    const directoryPath = this.facade.getDirectoryPath(activeDocumentPath);
-    let searchPatern = '*';
-    if (directoryPath.length) {
-      searchPatern = path.normalize(directoryPath + '/*');
+
+    const companionFiles = await this.getCompanionFiles(activeDocumentPath);
+    if (companionFiles.length === 0) {
+      throw new FindCompanionFileException();
     }
-    const [companionFilesPaths, error] = await asyncCatch(this.facade.findFilesPaths(searchPatern));
+
+    const [selectedFile, error2] = await asyncCatch(this.facade.selectCompanionFile(companionFiles));
+    if (!!error2) {
+      throw new PickCompanionFileException();
+    }
+    if (selectedFile === undefined) {
+      throw new SelectCompanionFileException();
+    }
+
+    this.facade.openCompanionFile(selectedFile);
+  }
+
+  public async getCompanionFiles(activeDocumentPath: string): Promise<CompanionFile[]> {
+    const searchPatern = this.getSearchPattern(activeDocumentPath);
+    const [candidatesFilesPaths, error] = await asyncCatch(this.facade.findFilePaths(searchPatern));
     if (!!error) {
       throw new FindCompanionFileException();
     }
-    return matchCompanion(activeDocumentPath, companionFilesPaths);
+
+    const companionFilesPaths = this.matchCompanion(activeDocumentPath, candidatesFilesPaths);
+    const friendlyNameMap = await this.facade.getFriendlyNameMap(DEFAULT_FRIENDLY_NAME_MAP);
+    const companionFiles = CompanionFile.createCompanionFiles(companionFilesPaths, friendlyNameMap);
+
+    return companionFiles;
+  }
+
+  public getSearchPattern(activeDocumentPath: string) {
+    const absoluteParentDirectoryPath = path.normalize(path.dirname(activeDocumentPath) + '/');
+    const workspaceRootFoldersPaths = this.facade.getWorkspaceRootFoldersPaths();
+    const rootPath = workspaceRootFoldersPaths.find(folderPath => absoluteParentDirectoryPath.indexOf(folderPath) >= 0) as string;
+    if (rootPath === undefined) {
+      throw new NoOpenWorkspaceException();
+    }
+
+    const relativeParentDirectoryPath = absoluteParentDirectoryPath.replace(rootPath, '');
+    if (relativeParentDirectoryPath.length) {
+      return path.normalize(relativeParentDirectoryPath + '/*');
+    }
+
+    return '*';
+  }
+
+  /**
+   * 
+   * @param activePath 
+   * @param companionPaths 
+   * @returns 
+   */
+  matchCompanion(activePath: string, companionPaths: string[]): string[] {
+    const fileName = this.getConventionalFilePath(activePath);
+    const filteredCompanionPaths = companionPaths.filter((companionPath: string) => {
+      const companionName = this.getConventionalFilePath(companionPath);
+      const isTheSameFileName = companionName === fileName;
+      const isTheSameFilePath = activePath === companionPath;
+      const isDifferentFile = isTheSameFileName && !isTheSameFilePath;
+
+      return isDifferentFile;
+    });
+
+    return filteredCompanionPaths;
+  }
+
+  /**
+ * @param filePath a file absolute or relative path
+ * @returns the file path without its "suffixed pieces"
+ * where "suffixed pieces" are every piece separated by "."
+ * @example c:/some-folder/some-file.some-convetional-type-name.extension
+ * returns c:/some-folder/some-file
+ * @example  components/editor.component.ts
+ * returns  components/editor
+ */
+  getConventionalFilePath(filePath: string): string {
+    /**
+     * NOTE: in order to support more
+     * file name conventions, that may be passed 
+     * as argument from config.
+     */
+    const splitter = '.';
+    let split = path.basename(filePath).split(splitter);
+    let name = split[0];
+    return name;
   }
 }

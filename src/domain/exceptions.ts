@@ -17,6 +17,12 @@ export class WarningException extends Exception {
   public readonly type = ExceptionTypes.warn;
 }
 
+export class NoOpenWorkspaceException extends ErrorException {
+  constructor() {
+    super('No workspace opened.');
+  }
+}
+
 export class OpenCompanionFileException extends ErrorException {
   constructor() {
     super('Failed to open companion file.');

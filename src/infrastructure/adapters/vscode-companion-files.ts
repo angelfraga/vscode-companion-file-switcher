@@ -1,10 +1,12 @@
 import path = require('path');
+
 import * as vscode from 'vscode';
+import { CompanionFile } from '../../domain/companion-file';
 import { CompanionFilesFacade } from "../../domain/companion-files";
 import { Exception, ExceptionTypes, OpenCompanionFileException, ShowCompanionFileException } from "../../domain/exceptions";
 import { FriendlyNameMap } from '../../domain/friendly-name';
-import { CompanionFile } from '../../domain/quick-pick-item';
 import { asyncCatch } from "../../domain/tools";
+
 
 export class VscodeCompanionFilesImpl implements CompanionFilesFacade {
   getFriendlyNameMap(defaultFriendlyMap: FriendlyNameMap): FriendlyNameMap {
@@ -18,27 +20,20 @@ export class VscodeCompanionFilesImpl implements CompanionFilesFacade {
     return vscode.window.activeTextEditor?.document?.uri?.fsPath;
   }
 
-  getDirectoryPath(documentPath: string) {
-    const absoluteDirectoryPath = path.normalize(path.dirname(documentPath) + '/');
-    const getMultiRootFolderPath = () => {
-      const rootFoldersPaths = vscode.workspace.workspaceFolders?.map(folder => path.normalize(folder.uri.fsPath + '/'));
-      return rootFoldersPaths?.find(folderPath => absoluteDirectoryPath.indexOf(folderPath) >= 0);
-    };
-
-    const rootPath = getMultiRootFolderPath() || vscode.workspace.rootPath as string;
-
-    // Remove root directory
-    const relativeDirectoryPath = absoluteDirectoryPath.replace(rootPath, '');
-    return relativeDirectoryPath;
+  getWorkspaceRootFoldersPaths() {
+    const nonOpenedWorkspaceFallback: vscode.WorkspaceFolder[] = [];
+    const folders = vscode.workspace.workspaceFolders || nonOpenedWorkspaceFallback;
+    const multiRootFoldersPaths = folders.map(folder => path.normalize(folder.uri.fsPath + '/'));
+    return multiRootFoldersPaths;
   }
 
-  async findFilesPaths(searchPatern: string) {
+  async findFilePaths(searchPatern: string) {
     const documentUris = await vscode.workspace.findFiles(searchPatern, '**/node_modules/**');
     return documentUris.map(uri => uri.fsPath);
   }
-  async openCompanionFile(filePath: string) {
+  async openCompanionFile(file: CompanionFile) {
     // Open doc
-    const [document, error] = await asyncCatch(vscode.workspace.openTextDocument(filePath));
+    const [document, error] = await asyncCatch(vscode.workspace.openTextDocument(file.filePath));
     if (error !== null) {
       throw new OpenCompanionFileException();
     }
@@ -46,25 +41,24 @@ export class VscodeCompanionFilesImpl implements CompanionFilesFacade {
     // Show a text document to the active view column
     const activeViewColumn = vscode.window.activeTextEditor?.viewColumn;
     const [, error2] = await asyncCatch(vscode.window.showTextDocument(document, activeViewColumn));
-    if (error !== null) {
+    if (error2 !== null) {
       throw new ShowCompanionFileException();
     }
   }
 
   handleException(exception: any | Error | Exception) {
-    switch (exception.type) {
-      case ExceptionTypes.error:
-        vscode.window.showErrorMessage(exception.message);
-        break;
+    switch (exception?.type) {
       case ExceptionTypes.info:
         vscode.window.showInformationMessage(exception.message);
         break;
       case ExceptionTypes.warn:
         vscode.window.showWarningMessage(exception.message);
         break;
+      case ExceptionTypes.error:
       default:
         vscode.window.showErrorMessage(exception.message);
         break;
     }
   }
+
 };
