@@ -2,11 +2,11 @@
 {
     "files.exclude": {
         // set this to true to hide the "out" folder with the compiled JS files
-        "out": false 
+        "out": false
     },
     "search.exclude": {
         // set this to false to include "out" folder in search results
-        "out": true 
+        "out": true
     },
     // we want to use the TS server from our node_modules folder to control its version,
     "typescript.tsdk": "./node_modules/typescript/lib",
@@ -14,6 +14,7 @@
         "source.organizeImports": true,
         "source.fixAll": true
     },
+    "typescript.referencesCodeLens.enabled": true,
     "[typescript]": {
         "editor.formatOnSave": true,
         "editor.insertSpaces": true,

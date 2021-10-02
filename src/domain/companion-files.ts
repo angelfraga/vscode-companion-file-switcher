@@ -1,138 +1,213 @@
 import * as path from 'path';
-import { CompanionFile } from './companion-file';
+import { asyncCatch } from '../shared/utils/async-catch';
+import { CompanionFilesAdapter } from './adapters/companion-files-adapter.service';
+import { ErrorHandlerAdapter } from './adapters/error-handler-adapter.service';
+import { Companion } from './entities/companion';
+import { CompanionFile } from './entities/companion-file';
+import { Config } from './entities/config';
+import { File } from './entities/file';
 import {
-  ActiveDocumentException,
-  ErrorException,
-  FindCompanionFileException,
-  NoOpenWorkspaceException,
-  PickCompanionFileException,
-  SelectCompanionFileException
+  ActiveDocumentException, FindCompanionFileException,
+  NoOpenWorkspaceException, SelectCompanionFileException
 } from './exceptions';
-import { FriendlyNameMap } from './friendly-name';
-import { asyncCatch } from './tools';
 
-export interface CompanionFilesFacade {
-  getActiveDocumentPath(): string | undefined;
-  findFilePaths(includePattern: string, excludePattern?: string): Promise<string[]>;
-  getWorkspaceRootFoldersPaths(): string[];
-  openCompanionFile(file: CompanionFile): Promise<any>;
-  selectCompanionFile(files: CompanionFile[]): Promise<CompanionFile | undefined>;
-  handleException(error: any | Error | ErrorException): any;
-  getFriendlyNameMap(defaultFriendlyMap: FriendlyNameMap): FriendlyNameMap;
-}
 
-export const DEFAULT_FRIENDLY_NAME_MAP = {
-  'component.ts': 'Component',
-  'service.ts': 'Service',
-  'pipe.ts': 'Pipe',
-  'test.ts': 'Test',
-  'directive.ts': 'Directive',
-  'routes.ts': 'Routes',
-  'guard.ts': 'Guard',
-  'component.html': 'Component view',
-  'component.scss': 'Component style',
-  "component.spec": "Component specifications"
+export const DEFAULT_CONFIG: Config = {
+  exclude: [
+    '**/node_modules/**'
+  ],
+  include: [
+    {
+      "type": "Angular",
+      "companions": [
+        {
+          "label": "Component View",
+          "matcher": "${name}.component.html",
+          "globPattern": "${parentDirPath}${name}.component.html"
+        },
+        {
+          "label": "Component",
+          "matcher": "${name}.component.ts",
+          "globPattern": "${parentDirPath}${name}.component.ts"
+        },
+        {
+          "label": "Component Style",
+          "matcher": "${name}.component.(css|scss)",
+          "globPattern": "${parentDirPath}${name}.component.{css,scss}"
+        },
+        {
+          "label": "Component Test",
+          "matcher": "${name}.component.spec.ts",
+          "globPattern": "${parentDirPath}${name}.component.spec.ts"
+        },
+        {
+          "label": "Class",
+          "matcher": "${name}.ts",
+          "globPattern": "${parentDirPath}${name}.ts"
+        },
+        {
+          "label": "Model",
+          "matcher": "${name}.model.ts",
+          "globPattern": "${parentDirPath}${name}.model.ts"
+        },
+        {
+          "label": "Service",
+          "matcher": "${name}.service.ts",
+          "globPattern": "${parentDirPath}${name}.service.ts"
+        },
+        {
+          "label": "Test",
+          "matcher": "${name}.spec.ts",
+          "globPattern": "${parentDirPath}${name}.spec.ts"
+        },
+      ]
+    },
+    {
+      type: 'Java',
+      companions: [
+        {
+          "label": "Class",
+          "matcher": "${name}.java",
+          "globPattern": "${rootPath}src/main/**${name}.java"
+        },
+        {
+          "label": "Class Test",
+          "matcher": "${name}.java",
+          "globPattern": "${rootPath}src/test/**${name}.java"
+        }
+      ]
+    },
+    {
+      type: 'Golang',
+      companions: [
+        {
+          "label": "Go Class",
+          "matcher": "${name}.go",
+          "globPattern": "${parentDirPath}${name}.go"
+        },
+        {
+          "label": "Go Test",
+          "matcher": "${name}_test.go",
+          "globPattern": "${parentDirPath}${name}_test.go"
+        }
+      ]
+    }
+  ]
 };
 
 export class CompanionFiles {
 
   constructor(
-    private readonly facade: CompanionFilesFacade
+    private readonly adapter: CompanionFilesAdapter,
+    private readonly errorHandler: ErrorHandlerAdapter
   ) { }
 
   /**
    * Entry point for this extension when is called
    */
   public async run() {
-    const activeDocumentPath = this.facade.getActiveDocumentPath();
-    if (activeDocumentPath === undefined) {
-      throw new ActiveDocumentException();
-    }
+    try {
+      const activeDocumentPath = this.adapter.getActiveDocumentPath();
+      if (activeDocumentPath === undefined) {
+        throw new ActiveDocumentException();
+      }
 
-    const companionFiles = await this.getCompanionFiles(activeDocumentPath);
-    if (companionFiles.length === 0) {
-      throw new FindCompanionFileException();
-    }
+      const companionFiles = await this.searchCompanionFiles(activeDocumentPath);
+      if (companionFiles.length === 0) {
+        throw new FindCompanionFileException();
+      }
 
-    const [selectedFile, error2] = await asyncCatch(this.facade.selectCompanionFile(companionFiles));
-    if (!!error2) {
-      throw new PickCompanionFileException();
-    }
-    if (selectedFile === undefined) {
-      throw new SelectCompanionFileException();
-    }
 
-    this.facade.openCompanionFile(selectedFile);
+      const [, errorOnSelect] = await asyncCatch(
+        this.adapter.selectCompanionFile(companionFiles)
+      );
+      if (errorOnSelect) {
+        throw new SelectCompanionFileException();
+      }
+    } catch (error) {
+      this.errorHandler.handleException(error);
+    }
   }
 
-  public async getCompanionFiles(activeDocumentPath: string): Promise<CompanionFile[]> {
-    const searchPatern = this.getSearchPattern(activeDocumentPath);
-    const [candidatesFilesPaths, error] = await asyncCatch(this.facade.findFilePaths(searchPatern));
-    if (!!error) {
-      throw new FindCompanionFileException();
-    }
-
-    const companionFilesPaths = this.matchCompanion(activeDocumentPath, candidatesFilesPaths);
-    const friendlyNameMap = await this.facade.getFriendlyNameMap(DEFAULT_FRIENDLY_NAME_MAP);
-    const companionFiles = CompanionFile.createCompanionFiles(companionFilesPaths, friendlyNameMap);
-
-    return companionFiles;
-  }
-
-  public getSearchPattern(activeDocumentPath: string) {
-    const absoluteParentDirectoryPath = path.normalize(path.dirname(activeDocumentPath) + '/');
-    const workspaceRootFoldersPaths = this.facade.getWorkspaceRootFoldersPaths();
-    const rootPath = workspaceRootFoldersPaths.find(folderPath => absoluteParentDirectoryPath.indexOf(folderPath) >= 0) as string;
+  public async searchCompanionFiles(activeDocumentPath: string): Promise<CompanionFile[]> {
+    const file = new File(activeDocumentPath);
+    const rootFolderPaths = this.adapter.getWorkspaceRootFoldersPaths();
+    const rootPath = file.findRootFolderPath(rootFolderPaths);
     if (rootPath === undefined) {
       throw new NoOpenWorkspaceException();
     }
 
-    const relativeParentDirectoryPath = absoluteParentDirectoryPath.replace(rootPath, '');
-    if (relativeParentDirectoryPath.length) {
-      return path.normalize(relativeParentDirectoryPath + '/*');
-    }
+    // this.facade.getConfig(DEFAULT_CONFIG);
+    const config = DEFAULT_CONFIG;
 
-    return '*';
-  }
-
-  /**
-   * 
-   * @param activePath 
-   * @param companionPaths 
-   * @returns 
-   */
-  matchCompanion(activePath: string, companionPaths: string[]): string[] {
-    const fileName = this.getConventionalFilePath(activePath);
-    const filteredCompanionPaths = companionPaths.filter((companionPath: string) => {
-      const companionName = this.getConventionalFilePath(companionPath);
-      const isTheSameFileName = companionName === fileName;
-      const isTheSameFilePath = activePath === companionPath;
-      const isDifferentFile = isTheSameFileName && !isTheSameFilePath;
-
-      return isDifferentFile;
+    const matchedGroup = config.include.find(searchGroup => {
+      const matchedCompanion = searchGroup.companions.find(companion => {
+        const regex = new RegExp(companion.matcher.replace('${name}', '.*'));
+        return regex.test(file.name);
+      });
+      return matchedCompanion;
     });
 
-    return filteredCompanionPaths;
+    if (!matchedGroup) {
+      throw new FindCompanionFileException();
+    }
+
+    const names = matchedGroup.companions.map(companion => {
+      // create three groups ()(.*)() where second is the name
+      const remover = '(' + companion.matcher.replace('${name}', ')(.*)(') + ')';
+      // first item is the string itself
+      const [, , name] = file.name.match(new RegExp(remover)) || [];
+      return name;
+    });
+
+    const name = names.reduce((a, b) => {
+      if (!a) { return b; }
+      if (!b) { return a; }
+      if (a === b) { return a; }
+      return a.length < b.length ? a : b;
+    });
+
+    const parentDirectoryRelativePath = file.parentDirPath().replace(rootPath, '');
+    const workspaceFolderName = path.basename(rootPath);
+    // The workspaceFolderPattern plus a space seems to work for filtering in a root folder
+    const workspaceFolderPattern = workspaceFolderName + ' ';
+    const patterns = matchedGroup.companions.map(companion => {
+
+      const isFromRoot = /\$\{rootPath\}/.test(companion.globPattern);
+
+      const patternWithVariables = companion.globPattern
+        .replace('${name}', name)
+        .replace('${parentDirPath}', parentDirectoryRelativePath)
+        .replace('${rootPath}', '');
+
+      return { ...companion, globPattern: patternWithVariables, isFromRoot };
+    });
+    const companionFiles = await this.getCompanionFiles(patterns, rootPath);
+
+    return companionFiles;
   }
 
-  /**
- * @param filePath a file absolute or relative path
- * @returns the file path without its "suffixed pieces"
- * where "suffixed pieces" are every piece separated by "."
- * @example c:/some-folder/some-file.some-convetional-type-name.extension
- * returns c:/some-folder/some-file
- * @example  components/editor.component.ts
- * returns  components/editor
- */
-  getConventionalFilePath(filePath: string): string {
-    /**
-     * NOTE: in order to support more
-     * file name conventions, that may be passed 
-     * as argument from config.
-     */
-    const splitter = '.';
-    let split = path.basename(filePath).split(splitter);
-    let name = split[0];
-    return name;
+  async getCompanionFiles(companions: Companion[], rootPath: string): Promise<CompanionFile[]> {
+    const companionFiles: CompanionFile[] = [];
+    for (let companion of companions) {
+      const [paths, error] = await asyncCatch(this.adapter.findFilePaths(companion.globPattern));
+      if (!!error) {
+        throw new FindCompanionFileException();
+      }
+
+      (paths || []).forEach(path => {
+        if (path) {
+          if (!companion.isFromRoot) {
+            companionFiles.push(new CompanionFile(path, companion.label, path));
+            return;
+          }
+          if (path.indexOf(rootPath) > -1) {
+            companionFiles.push(new CompanionFile(path, companion.label, path));
+          }
+        }
+      });
+    }
+    return companionFiles;
   }
+
 }
