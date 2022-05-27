@@ -1,52 +1,96 @@
 {
-    "name": "companion-file-switcher",
-    "displayName": "Companion file switcher",
+    "name": "companion-files",
+    "displayName": "Companion files",
     "description": "Switch accross companion files",
-    "version": "0.2.0",
-    "publisher": "ClementVidal",
+    "version": "0.1.0",
+    "publisher": "angelfraga",
+    "contributors": [
+        "angelfraga"
+    ],
     "license": "MIT",
     "engines": {
-        "vscode": "^1.0.0"
+        "vscode": "^1.58.0"
     },
     "categories": [
         "Other"
     ],
     "activationEvents": [
-        "onCommand:extension.companionFileSwitcher.switch"
+        "onCommand:extension.companion-files"
     ],
-    "main": "./out/src/extension",
+    "main": "./out/extension.js",
     "contributes": {
         "commands": [
             {
-                "command": "extension.companionFileSwitcher.switch",
+                "command": "extension.companion-files",
                 "title": "Switch between companion files"
             }
         ],
         "configuration": {
             "type": "object",
-            "title": "Companion file switcher configuration",
+            "title": "Companion files configuration",
             "properties": {
-                "companionFileSwitcher.friendlyName": {
+                "companion-files": {
                     "type": "object",
-                    "default": {
-                        "component.ts": "Component",
-                        "service.ts": "Service",
-                        "pipe.ts": "Pipe",
-                        "test.ts": "Test",
-                        "directive.ts": "Directive",
-                        "routing.ts": "Routes",
-                        "guard.ts": "Guard",
-                        "component.html": "Component view",
-                        "component.scss": "Component style",
-                        "component.spec": "Component Spec"
+                    "properties": {
+                        "exclude": {
+                            "type": "array",
+                            "default": [
+                                "**/node_modules/**"
+                            ]
+                        },
+                        "include": {
+                            "type": "object",
+                            "default": [
+                                {
+                                    "type": "Angular",
+                                    "companions": [
+                                        {
+                                            "label": "Component View",
+                                            "matcher": "${name}.component.html",
+                                            "globPattern": "${parentDirPath}${name}.component.html"
+                                        },
+                                        {
+                                            "label": "Component",
+                                            "matcher": "${name}.component.ts",
+                                            "globPattern": "${parentDirPath}${name}.component.ts"
+                                        },
+                                        {
+                                            "label": "Component Style",
+                                            "matcher": "${name}.component.(css|scss)",
+                                            "globPattern": "${parentDirPath}${name}.component.{css,scss}"
+                                        },
+                                        {
+                                            "label": "Class",
+                                            "matcher": "${name}.ts",
+                                            "globPattern": "${parentDirPath}${name}.ts"
+                                        },
+                                        {
+                                            "label": "Model",
+                                            "matcher": "${name}.model.ts",
+                                            "globPattern": "${parentDirPath}${name}.model.ts"
+                                        },
+                                        {
+                                            "label": "Service",
+                                            "matcher": "${name}.service.ts",
+                                            "globPattern": "${parentDirPath}${name}.service.ts"
+                                        },
+                                        {
+                                            "label": "Test",
+                                            "matcher": "${name}.spec.ts",
+                                            "globPattern": "${parentDirPath}${name}.spec.ts"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
                     },
-                    "description": "Companion file switcher: map an extension to it's friendly name"
+                    "description": "Companion files settings, "
                 }
             }
         },
         "keybindings": [
             {
-                "command": "extension.companionFileSwitcher.switch",
+                "command": "extension.companion-files",
                 "key": "ctrl+shift+c ctrl+shift+f",
                 "when": "editorTextFocus"
             }
@@ -55,19 +99,30 @@
     "icon": "images/icon.png",
     "repository": {
         "type": "git",
-        "url": "https://github.com/ClementVidal/vscode-companion-file-switcher"
+        "url": "https://github.com/angelfraga/vscode-companion-files"
     },
     "bugs": {
-        "url": "https://github.com/ClementVidal/vscode-companion-file-switcher/issues"
+        "url": "https://github.com/angelfraga/vscode-companion-files/issues"
     },
     "scripts": {
-        "vscode:prepublish": "tsc -p ./",
-        "compile": "tsc -watch -p ./",
-        "postinstall": "node ./node_modules/vscode/bin/install"
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
     },
     "devDependencies": {
-        "@types/node": "^6.0.40",
-        "typescript": "^2.0.3",
-        "vscode": "^1.1.21"
+        "@types/vscode": "^1.58.0",
+        "@types/glob": "^7.1.3",
+        "@types/mocha": "^8.2.2",
+        "@types/node": "14.x",
+        "eslint": "^7.27.0",
+        "@typescript-eslint/eslint-plugin": "^4.26.0",
+        "@typescript-eslint/parser": "^4.26.0",
+        "glob": "^7.1.7",
+        "mocha": "^8.4.0",
+        "typescript": "^4.3.2",
+        "vscode-test": "^1.5.2"
     }
 }

@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
+import { vscodeSwitchCommand } from './application';
 
-import {switchCommand} from './switch-command';
 
 export function activate(context: vscode.ExtensionContext) {
 
-    let disposable = vscode.commands.registerCommand('extension.companionFileSwitcher.switch', () => {
-        switchCommand();
-    });
+  const disposable = vscode.commands.registerCommand('extension.companion-files', () => {
+    vscodeSwitchCommand();
+  });
 
-    context.subscriptions.push(disposable);
+  context.subscriptions.push(disposable);
 }
 
 export function deactivate() {

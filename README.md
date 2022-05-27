@@ -31,7 +31,7 @@ listing every companion with their friendly name if any.
 Activating this extension can be done by binding the following command:
 
 ```
-"command": "extension.companionFileSwitcher.switch"
+"command": "extension.companionFiles"
 ```
 
 By default this command is binded to **ctrl+shift+c ctrl+shift+f**
@@ -40,7 +40,7 @@ By default this command is binded to **ctrl+shift+c ctrl+shift+f**
 
 This extension use the following settings:
 
-* `companionFileSwitcher.friendlyName`: an object where key map to an extension 
+* `companionFiles.friendlyName`: an object where key map to an extension 
 and value map to the corresponding friendly name.  
 If not specified, the default value is:
 ```
